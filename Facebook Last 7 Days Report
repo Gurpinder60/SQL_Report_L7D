@@ -1,0 +1,78 @@
+WITH CTE AS (
+    SELECT
+        MAX(report_date) AS max_report_date,
+        SUM(CASE 
+                WHEN spend > 0 THEN spend
+                ELSE 0 
+            END) AS total_spend,
+        SUM(CASE 
+                WHEN gms > 0 THEN gms
+                ELSE 0 
+            END) AS total_gms,
+        SUM(CASE 
+                WHEN rev > 0 THEN rev
+                ELSE 0 
+            END) AS total_rev
+    FROM
+        social
+)
+SELECT 
+    account_name AS account,
+    report_date,
+    SUM(clicks) AS Clicks,
+    CAST(SUM(spend) AS INT) AS Spend,
+    CAST(SUM(gms) AS INT) AS GMS,
+    CAST(SUM(orders) AS INT) AS orders,
+    CASE 
+        WHEN SUM(clicks) <> 0 THEN SUM(spend) / CAST(SUM(clicks) AS FLOAT)
+        ELSE 0
+    END AS CPC,
+    (CASE 
+        WHEN SUM(impressions) <> 0 THEN SUM(spend) / CAST(SUM(impressions) AS FLOAT)
+        ELSE 0
+    END) * 1000 AS CPM,
+    CASE 
+        WHEN SUM(impressions) <> 0 THEN SUM(clicks) / CAST(SUM(impressions) AS FLOAT)
+        ELSE 0
+    END AS CTR,
+    CASE 
+        WHEN SUM(visits) <> 0 THEN CAST(SUM(orders) AS INT) / SUM(visits)
+        ELSE 0
+    END AS CVR,
+    CASE 
+        WHEN SUM(orders) <> 0 THEN CAST(SUM(gms) AS FLOAT) / SUM(orders)
+        ELSE 0
+    END AS AOV,
+    SUM(CASE 
+            WHEN report_date <= CTE.max_report_date THEN spend 
+            ELSE 0 
+        END) / NULLIF(SUM([visits_raw]), 0) AS CPV,
+    CASE 
+        WHEN SUM(CASE 
+                WHEN report_date <= CTE.max_report_date THEN spend 
+                ELSE 0 
+            END) <> 0 THEN CAST(SUM(gms) AS INT) / NULLIF(SUM(CASE 
+                                                                WHEN report_date <= CTE.max_report_date THEN spend 
+                                                                ELSE 0 
+                                                            END), 0)
+        ELSE 0
+    END AS gms_$,
+    CASE 
+        WHEN SUM(CASE 
+                WHEN report_date <= CTE.max_report_date THEN spend 
+                ELSE 0 
+            END) <> 0 THEN CAST(SUM(total_rev) AS INT) / NULLIF(SUM(CASE 
+                                                                WHEN report_date <= CTE.max_report_date THEN spend 
+                                                                ELSE 0 
+                                                            END), 0)
+        ELSE 0
+    END AS ROI
+FROM 
+    social 
+    CROSS JOIN CTE
+WHERE 
+    platform LIKE '%Facebook%'
+    AND report_date >= DATEADD(day, -6, CAST(GETDATE() AS DATE))
+GROUP BY 
+    account_name,
+    report_date;
